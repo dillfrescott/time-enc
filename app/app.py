@@ -10,7 +10,7 @@ import io
 import time
 
 app = Flask(__name__)
-app.config['SQLALCHEMY_DATABASE_URI'] = 'postgresql://your_postgres_string'
+app.config['SQLALCHEMY_DATABASE_URI'] = 'postgresql://postgres:postgres@tenc_db:5432/tenc'
 app.config['SECRET_KEY'] = 'change_me'
 app.config['MAX_CONTENT_LENGTH'] = 100000 * 1024 * 1024
 db = SQLAlchemy(app)
