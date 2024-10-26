@@ -1,19 +1,27 @@
 services:
-  myapp:
+  tenc:
     build:
       context: .
       dockerfile: Dockerfile
     ports:
       - "5000:5000"
     restart: always
+    depends_on:
+      tenc_db:
+        condition: service_healthy
 
   tenc_db:
-    restart: always
     image: postgres:17
     container_name: tenc_db
+    restart: always
     environment:
       POSTGRES_DB: tenc
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     volumes:
       - ./tenc_data:/var/lib/postgresql/data
