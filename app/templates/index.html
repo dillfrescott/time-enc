@@ -30,6 +30,7 @@
             width: 100%;
             margin-bottom: 20px;
             box-sizing: border-box;
+            position: relative;
         }
         label {
             display: block;
@@ -66,6 +67,21 @@
             color: #ffcc00;
             margin-top: 10px;
         }
+        /* Spinner Styles */
+        .spinner {
+            display: none;
+            width: 40px;
+            height: 40px;
+            margin: 20px auto 0;
+            border: 4px solid rgba(255, 255, 255, 0.3);
+            border-top: 4px solid #28a745;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
     </style>
 </head>
 <body>
@@ -79,6 +95,7 @@
             <label for="time">Enter delay in seconds:</label>
             <input type="number" name="time" id="time" min="0" required>
             <button type="submit">Encrypt File</button>
+            <div class="spinner" id="encryptSpinner"></div>
         </form>
         <div class="message" id="encryptMessage"></div>
     </div>
@@ -89,63 +106,71 @@
             <label for="decryptFile">Choose an encrypted file:</label>
             <input type="file" name="file" id="decryptFile" required>
             <button type="submit">Decrypt File</button>
+            <div class="spinner" id="decryptSpinner"></div>
         </form>
         <div class="message" id="decryptMessage"></div>
     </div>
 
-	<script>
-		async function handleFormSubmit(formId, url, messageId) {
-			const form = document.getElementById(formId);
-			const messageElement = document.getElementById(messageId);
-			const formData = new FormData(form);
+    <script>
+        async function handleFormSubmit(formId, url, messageId, spinnerId) {
+            const form = document.getElementById(formId);
+            const messageElement = document.getElementById(messageId);
+            const spinner = document.getElementById(spinnerId);
+            const formData = new FormData(form);
 
-			try {
-				const response = await fetch(url, {
-					method: 'POST',
-					body: formData
-				});
+            // Show the spinner and clear previous messages
+            spinner.style.display = 'block';
+            messageElement.textContent = "";
 
-				if (response.ok) {
-					// Handle file download if response contains file data
-					const blob = await response.blob();
-					const downloadUrl = window.URL.createObjectURL(blob);
-					const link = document.createElement('a');
-					link.href = downloadUrl;
+            try {
+                const response = await fetch(url, {
+                    method: 'POST',
+                    body: formData
+                });
 
-					// Set the download attribute to the filename received from the server
-					const contentDisposition = response.headers.get('Content-Disposition');
-					let filename = 'downloaded_file';
-					if (contentDisposition && contentDisposition.includes('attachment')) {
-						const matches = /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/.exec(contentDisposition);
-						if (matches !== null && matches[1]) {
-							filename = matches[1].replace(/['"]/g, '');
-						}
-					}
-					link.download = filename;
-					
-					document.body.appendChild(link);
-					link.click();
-					link.remove();
-					window.URL.revokeObjectURL(downloadUrl);
-					messageElement.textContent = "Operation successful!";
-				} else {
-					const data = await response.json();
-					messageElement.textContent = data.error || "An error occurred.";
-				}
-			} catch (error) {
-				messageElement.textContent = "An error occurred.";
-			}
-		}
+                if (response.ok) {
+                    const blob = await response.blob();
+                    const downloadUrl = window.URL.createObjectURL(blob);
+                    const link = document.createElement('a');
+                    link.href = downloadUrl;
 
-		document.getElementById('encryptForm').addEventListener('submit', function(event) {
-			event.preventDefault();
-			handleFormSubmit('encryptForm', '/encrypt', 'encryptMessage');
-		});
+                    // Set the download attribute to the filename received from the server
+                    const contentDisposition = response.headers.get('Content-Disposition');
+                    let filename = 'downloaded_file';
+                    if (contentDisposition && contentDisposition.includes('attachment')) {
+                        const matches = /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/.exec(contentDisposition);
+                        if (matches !== null && matches[1]) {
+                            filename = matches[1].replace(/['"]/g, '');
+                        }
+                    }
+                    link.download = filename;
 
-		document.getElementById('decryptForm').addEventListener('submit', function(event) {
-			event.preventDefault();
-			handleFormSubmit('decryptForm', '/decrypt', 'decryptMessage');
-		});
-	</script>
+                    document.body.appendChild(link);
+                    link.click();
+                    link.remove();
+                    window.URL.revokeObjectURL(downloadUrl);
+                    messageElement.textContent = "Operation successful!";
+                } else {
+                    const data = await response.json();
+                    messageElement.textContent = data.error || "An error occurred.";
+                }
+            } catch (error) {
+                messageElement.textContent = "An error occurred.";
+            } finally {
+                // Hide the spinner after operation completion
+                spinner.style.display = 'none';
+            }
+        }
+
+        document.getElementById('encryptForm').addEventListener('submit', function(event) {
+            event.preventDefault();
+            handleFormSubmit('encryptForm', '/encrypt', 'encryptMessage', 'encryptSpinner');
+        });
+
+        document.getElementById('decryptForm').addEventListener('submit', function(event) {
+            event.preventDefault();
+            handleFormSubmit('decryptForm', '/decrypt', 'decryptMessage', 'decryptSpinner');
+        });
+    </script>
 </body>
 </html>
