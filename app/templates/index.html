@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Time Delay File Encrypt/Decrypt</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #121212;
+            color: #e0e0e0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+            margin: 0;
+        }
+        h1 {
+            color: #28a745;
+            margin-bottom: 20px;
+        }
+        .container {
+            background-color: #1e1e1e;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 0 15px rgba(0, 0, 0, 0.5);
+            text-align: center;
+            max-width: 400px;
+            width: 100%;
+            margin-bottom: 20px;
+            box-sizing: border-box;
+        }
+        label {
+            display: block;
+            margin: 15px 0 5px;
+            color: #ccc;
+        }
+        input[type="file"],
+        input[type="number"] {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #333;
+            border-radius: 4px;
+            background-color: #2a2a2a;
+            color: #e0e0e0;
+            box-sizing: border-box;
+        }
+        button {
+            width: 100%;
+            padding: 12px;
+            border: none;
+            background-color: #28a745;
+            color: #e0e0e0;
+            font-weight: bold;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-top: 15px;
+            transition: background-color 0.3s ease;
+            box-sizing: border-box;
+        }
+        button:hover {
+            background-color: #218838;
+        }
+        .message {
+            color: #ffcc00;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Time Delay File Encrypt/Decrypt</h1>
+
+    <div class="container" id="encrypt-section">
+        <h2>Encrypt a File</h2>
+        <form id="encryptForm">
+            <label for="encryptFile">Choose a file:</label>
+            <input type="file" name="file" id="encryptFile" required>
+            <label for="time">Enter delay in seconds:</label>
+            <input type="number" name="time" id="time" min="0" required>
+            <button type="submit">Encrypt File</button>
+        </form>
+        <div class="message" id="encryptMessage"></div>
+    </div>
+
+    <div class="container" id="decrypt-section">
+        <h2>Decrypt a File</h2>
+        <form id="decryptForm">
+            <label for="decryptFile">Choose an encrypted file:</label>
+            <input type="file" name="file" id="decryptFile" required>
+            <button type="submit">Decrypt File</button>
+        </form>
+        <div class="message" id="decryptMessage"></div>
+    </div>
+
+	<script>
+		async function handleFormSubmit(formId, url, messageId) {
+			const form = document.getElementById(formId);
+			const messageElement = document.getElementById(messageId);
+			const formData = new FormData(form);
+
+			try {
+				const response = await fetch(url, {
+					method: 'POST',
+					body: formData
+				});
+
+				if (response.ok) {
+					// Handle file download if response contains file data
+					const blob = await response.blob();
+					const downloadUrl = window.URL.createObjectURL(blob);
+					const link = document.createElement('a');
+					link.href = downloadUrl;
+
+					// Set the download attribute to the filename received from the server
+					const contentDisposition = response.headers.get('Content-Disposition');
+					let filename = 'downloaded_file';
+					if (contentDisposition && contentDisposition.includes('attachment')) {
+						const matches = /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/.exec(contentDisposition);
+						if (matches !== null && matches[1]) {
+							filename = matches[1].replace(/['"]/g, '');
+						}
+					}
+					link.download = filename;
+					
+					document.body.appendChild(link);
+					link.click();
+					link.remove();
+					window.URL.revokeObjectURL(downloadUrl);
+					messageElement.textContent = "Operation successful!";
+				} else {
+					const data = await response.json();
+					messageElement.textContent = data.error || "An error occurred.";
+				}
+			} catch (error) {
+				messageElement.textContent = "An error occurred.";
+			}
+		}
+
+		document.getElementById('encryptForm').addEventListener('submit', function(event) {
+			event.preventDefault();
+			handleFormSubmit('encryptForm', '/encrypt', 'encryptMessage');
+		});
+
+		document.getElementById('decryptForm').addEventListener('submit', function(event) {
+			event.preventDefault();
+			handleFormSubmit('decryptForm', '/decrypt', 'decryptMessage');
+		});
+	</script>
+</body>
+</html>
