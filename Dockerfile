@@ -2,9 +2,13 @@ FROM ubuntu:24.04
 
 RUN apt update && apt upgrade -y
 
-RUN apt install -y python3 python3-pip postgresql-server-dev-all
+RUN apt install -y python3 python3-pip
 
-RUN pip install Flask Flask-SQLAlchemy PyCrypto psycopg2 pycryptodome --break-system-packages
+RUN pip install Flask --break-system-packages
+
+COPY tle /bin/tle
+
+RUN chmod +x /bin/tle
 
 COPY app /app
 

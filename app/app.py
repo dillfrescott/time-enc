@@ -1,48 +1,48 @@
 from flask import Flask, request, send_file, jsonify, render_template
-from flask_sqlalchemy import SQLAlchemy
-from datetime import datetime, timedelta
-import secrets
-import base64
-import hashlib
-from Crypto.Cipher import AES
-from Crypto.Util.Padding import pad, unpad
+import subprocess
 import io
 import time
+import os
+import re
+from datetime import datetime, timedelta
 
 app = Flask(__name__)
-app.config['SQLALCHEMY_DATABASE_URI'] = 'postgresql://postgres:postgres@tenc_db:5432/tenc'
-app.config['SECRET_KEY'] = 'change_me'
+app.config['SECRET_KEY'] = 'random_string'
 app.config['MAX_CONTENT_LENGTH'] = 100000 * 1024 * 1024
-db = SQLAlchemy(app)
 
-# Database model
-class EncryptionRecord(db.Model):
-    __tablename__ = 'encryption_records'
-    id = db.Column(db.Integer, primary_key=True)
-    file_hash = db.Column(db.String(64), nullable=False, unique=True)
-    key = db.Column(db.String(64), nullable=False)
-    expiration_time = db.Column(db.BigInteger, nullable=False)
+# Use current time as reference instead of drand genesis
+def get_current_round():
+    """Get current round number based on current time"""
+    current_time = int(time.time())
+    return current_time // 3
 
-with app.app_context():
-    db.create_all()
+def round_to_time(round_number):
+    """Convert a round number to Unix timestamp"""
+    return round_number * 3
 
-# Encryption key length
-KEY_LENGTH = 32  # AES-256
-
-def generate_key():
-    return secrets.token_bytes(KEY_LENGTH)
-
-def encrypt_file(data, key):
-    cipher = AES.new(key, AES.MODE_CBC)
-    iv = cipher.iv
-    encrypted_data = cipher.encrypt(pad(data, AES.block_size))
-    return iv + encrypted_data
-
-def decrypt_file(data, key):
-    iv = data[:AES.block_size]
-    encrypted_data = data[AES.block_size:]
-    cipher = AES.new(key, AES.MODE_CBC, iv)
-    return unpad(cipher.decrypt(encrypted_data), AES.block_size)
+def parse_error_message(error_text):
+    """Parse the error message to extract round numbers and convert to time"""
+    match = re.search(r'expected round (\d+) > (\d+) current round', error_text)
+    if match:
+        expected_round = int(match.group(1))
+        current_round = int(match.group(2))
+        
+        # Convert rounds to timestamps based on current time
+        current_time = int(time.time())
+        base_time = current_time - (current_round * 3)
+        
+        unlock_time = base_time + (expected_round * 3)
+        
+        # Calculate time difference
+        time_diff = unlock_time - current_time
+        
+        return {
+            "error": "File is time-locked",
+            "unlock_timestamp": unlock_time,
+            "current_timestamp": current_time,
+            "seconds_remaining": time_diff
+        }
+    return {"error": error_text}
 
 @app.route('/')
 def index():
@@ -51,71 +51,81 @@ def index():
 @app.route('/encrypt', methods=['POST'])
 def encrypt_route():
     file = request.files['file']
-    delay = int(request.form.get('time', 0))
-    expiration_time_ms = int((time.time() + delay) * 1000)
-
-    # Generate and store encryption key
-    key = generate_key()
-    file_data = file.read()
-    encrypted_data = encrypt_file(file_data, key)
-
-    # Generate hash of encrypted data
-    file_hash = hashlib.sha256(encrypted_data).hexdigest()
-
-    # Save record in database
-    record = EncryptionRecord(
-        file_hash=file_hash,
-        key=base64.b64encode(key).decode(),
-        expiration_time=expiration_time_ms
-    )
-    db.session.add(record)
-    db.session.commit()
-
-    # Create the new filename with .tenc extension
-    new_filename = f'{file.filename}.tenc'
-
-    # Send encrypted file
-    return send_file(
-        io.BytesIO(encrypted_data),
-        as_attachment=True,
-        download_name=new_filename
-    )
+    delay = request.form.get('time', '10m')
+    
+    # Convert years to an equivalent duration that tle can understand
+    if delay.endswith('y'):
+        try:
+            years = int(delay[:-1])
+            # Convert years to days (approximate, not accounting for leap years)
+            days = years * 365
+            delay = f"{days}d"
+        except ValueError:
+            return jsonify({"error": "Invalid year format"}), 400
+    
+    input_filename = 'temp_input_file'
+    output_filename = 'encrypted_file.tenc'
+    
+    file.save(input_filename)
+    try:
+        subprocess.run(
+            ['tle', '--encrypt', '-D', delay, '-o', output_filename, input_filename],
+            check=True
+        )
+        with open(output_filename, 'rb') as encrypted_file:
+            encrypted_data = encrypted_file.read()
+        return send_file(
+            io.BytesIO(encrypted_data),
+            as_attachment=True,
+            download_name=f'{file.filename}.tenc'
+        )
+    except subprocess.CalledProcessError as e:
+        return jsonify({"error": "Encryption failed"}), 400
+    finally:
+        # Clean up temporary files
+        if os.path.exists(input_filename):
+            os.remove(input_filename)
+        if os.path.exists(output_filename):
+            os.remove(output_filename)
 
 @app.route('/decrypt', methods=['POST'])
 def decrypt_route():
     file = request.files['file']
-    encrypted_data = file.read()
-
-    # Generate hash of the uploaded encrypted file
-    file_hash = hashlib.sha256(encrypted_data).hexdigest()
-    record = EncryptionRecord.query.filter_by(file_hash=file_hash).first()
-
-    if not record:
-        return jsonify({"error": "Record not found"}), 404
-
-    current_time_ms = int(time.time() * 1000)
-    if current_time_ms < record.expiration_time:
-        remaining_time_ms = record.expiration_time - current_time_ms
-        remaining_seconds = remaining_time_ms // 1000
-        return jsonify({"error": f"Cannot decrypt yet. Try again in {remaining_seconds} seconds"}), 403
-
-    # Decrypt file content
-    key = base64.b64decode(record.key)
-    decrypted_data = decrypt_file(encrypted_data, key)
-
-    # Determine the original filename and create the new filename
-    original_filename = file.filename
-    if original_filename.endswith('.tenc'):
-        decrypted_filename = f'decrypted_{original_filename[:-5]}'
-    else:
-        decrypted_filename = f'decrypted_{original_filename}'
-
-    # Send decrypted file
-    return send_file(
-        io.BytesIO(decrypted_data),
-        as_attachment=True,
-        download_name=decrypted_filename
-    )
+    input_filename = 'temp_encrypted_file.tenc'
+    output_filename = 'decrypted_file'
+    
+    file.save(input_filename)
+    try:
+        result = subprocess.run(
+            ['tle', '--decrypt', '-o', output_filename, input_filename],
+            capture_output=True,
+            text=True
+        )
+        
+        if result.returncode != 0:
+            error_info = parse_error_message(result.stderr.strip())
+            return jsonify(error_info), 403
+            
+        with open(output_filename, 'rb') as decrypted_file:
+            decrypted_data = decrypted_file.read()
+            
+        original_filename = file.filename
+        if original_filename.endswith('.tenc'):
+            decrypted_filename = f'decrypted_{original_filename[:-5]}'
+        else:
+            decrypted_filename = f'decrypted_{original_filename}'
+            
+        return send_file(
+            io.BytesIO(decrypted_data),
+            as_attachment=True,
+            download_name=decrypted_filename
+        )
+    finally:
+        # Clean up temporary files
+        if os.path.exists(input_filename):
+            os.remove(input_filename)
+        if os.path.exists(output_filename):
+            os.remove(output_filename)
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=False)
