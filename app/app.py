@@ -52,6 +52,17 @@ def index():
 def encrypt_route():
     file = request.files['file']
     delay = request.form.get('time', '10m')
+    
+    # Convert years to an equivalent duration that tle can understand
+    if delay.endswith('y'):
+        try:
+            years = int(delay[:-1])
+            # Convert years to days (approximate, not accounting for leap years)
+            days = years * 365
+            delay = f"{days}d"
+        except ValueError:
+            return jsonify({"error": "Invalid year format"}), 400
+    
     input_filename = 'temp_input_file'
     output_filename = 'encrypted_file.tenc'
     
@@ -68,6 +79,8 @@ def encrypt_route():
             as_attachment=True,
             download_name=f'{file.filename}.tenc'
         )
+    except subprocess.CalledProcessError as e:
+        return jsonify({"error": "Encryption failed"}), 400
     finally:
         # Clean up temporary files
         if os.path.exists(input_filename):
