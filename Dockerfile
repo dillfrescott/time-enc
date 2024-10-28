@@ -1,8 +1,8 @@
 FROM ubuntu:24.04 AS builder
 
-ENV PATH=$PATH:/go/bin
-
 RUN apt update && apt upgrade -y
+
+ENV PATH=$PATH:/go/bin
 
 RUN apt install -y git wget
 
@@ -16,9 +16,9 @@ RUN go build
 
 FROM ubuntu:24.04 AS main
 
-COPY --from=builder /tlock/cmd/tle/tle /bin/tle
-
 RUN apt update && apt upgrade -y
+
+COPY --from=builder /tlock/cmd/tle/tle /bin/tle
 
 RUN apt install -y python3 python3-pip
 
