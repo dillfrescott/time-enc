@@ -1,8 +1,12 @@
 FROM ubuntu:24.04 AS builder
 
+ENV PATH=$PATH:/go/bin
+
 RUN apt update && apt upgrade -y
 
-RUN apt install -y golang git
+RUN apt install -y git wget
+
+RUN wget https://go.dev/dl/go1.23.2.linux-amd64.tar.gz && tar -xvf go1.23.2.linux-amd64.tar.gz
 
 RUN git clone https://github.com/drand/tlock /tlock
 
