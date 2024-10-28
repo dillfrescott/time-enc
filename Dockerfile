@@ -1,4 +1,4 @@
-FROM ubuntu:24.04 as builder
+FROM ubuntu:24.04 AS builder
 
 RUN apt update && apt upgrade -y
 
@@ -10,7 +10,7 @@ WORKDIR /tlock/cmd/tle
 
 RUN go build
 
-FROM ubuntu:24.04 as main
+FROM ubuntu:24.04 AS main
 
 COPY --from=builder /tlock/cmd/tle/tle /bin/tle
 
