@@ -1,12 +1,24 @@
-FROM ubuntu:24.04
+FROM ubuntu:24.04 as builder
+
+RUN apt update && apt upgrade -y
+
+RUN apt install -y golang git
+
+RUN git clone https://github.com/drand/tlock /tlock
+
+WORKDIR /tlock/cmd/tle
+
+RUN go build
+
+FROM ubuntu:24.04 as main
+
+COPY --from=builder /tlock/cmd/tle/tle /bin/tle
 
 RUN apt update && apt upgrade -y
 
 RUN apt install -y python3 python3-pip
 
 RUN pip install Flask --break-system-packages
-
-COPY tle /bin/tle
 
 RUN chmod +x /bin/tle
 
