@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Time Delay File Encrypt/Decrypt</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #121212;
+            color: #e0e0e0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+            margin: 0;
+        }
+        h1 {
+            color: #28a745;
+            margin-bottom: 20px;
+        }
+        .container {
+            background-color: #1e1e1e;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 0 15px rgba(0, 0, 0, 0.5);
+            text-align: center;
+            max-width: 400px;
+            width: 100%;
+            margin-bottom: 20px;
+            box-sizing: border-box;
+            position: relative;
+        }
+        label {
+            display: block;
+            margin: 15px 0 5px;
+            color: #ccc;
+        }
+        input[type="file"],
+        input[type="text"] {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #333;
+            border-radius: 4px;
+            background-color: #2a2a2a;
+            color: #e0e0e0;
+            box-sizing: border-box;
+        }
+        button {
+            width: 100%;
+            padding: 12px;
+            border: none;
+            background-color: #28a745;
+            color: #e0e0e0;
+            font-weight: bold;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-top: 15px;
+            transition: background-color 0.3s ease;
+            box-sizing: border-box;
+        }
+        button:hover {
+            background-color: #218838;
+        }
+        .message {
+            color: #ffcc00;
+            margin-top: 10px;
+        }
+        .spinner {
+            display: none;
+            width: 40px;
+            height: 40px;
+            margin: 20px auto 0;
+            border: 4px solid rgba(255, 255, 255, 0.3);
+            border-top: 4px solid #28a745;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .countdown {
+            margin-top: 15px;
+            padding: 10px;
+            background-color: #2a2a2a;
+            border-radius: 4px;
+            display: none;
+        }
+        .countdown.active {
+            display: block;
+        }
+        .time-remaining {
+            color: #28a745;
+            font-weight: bold;
+            margin-top: 5px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Time Delay File Encrypt/Decrypt</h1>
+
+    <div class="container" id="encrypt-section">
+        <h2>Encrypt a File</h2>
+        <form id="encryptForm">
+            <label for="encryptFile">Choose a file:</label>
+            <input type="file" name="file" id="encryptFile" required>
+            <label for="time">Enter delay (e.g., 10s, 5m, 2h, 1d):</label>
+            <input type="text" name="time" id="time" pattern="^[0-9]+[smhdy]$" required>
+            <button type="submit">Encrypt File</button>
+            <div class="spinner" id="encryptSpinner"></div>
+        </form>
+        <div class="message" id="encryptMessage"></div>
+    </div>
+
+    <div class="container" id="decrypt-section">
+        <h2>Decrypt a File</h2>
+        <form id="decryptForm">
+            <label for="decryptFile">Choose an encrypted file:</label>
+            <input type="file" name="file" id="decryptFile" required>
+            <button type="submit">Decrypt File</button>
+            <div class="spinner" id="decryptSpinner"></div>
+        </form>
+        <div class="message" id="decryptMessage"></div>
+        <div class="countdown" id="countdown">
+            <div>File is time-locked until:</div>
+            <div class="time-remaining" id="unlockTime"></div>
+            <div>Time remaining:</div>
+            <div class="time-remaining" id="timeRemaining"></div>
+        </div>
+    </div>
+
+    <script>
+        // Global variable to track the current timer
+        let currentCountdownTimer = null;
+
+        function formatTimeRemaining(seconds) {
+            const days = Math.floor(seconds / (24 * 60 * 60));
+            const hours = Math.floor((seconds % (24 * 60 * 60)) / (60 * 60));
+            const minutes = Math.floor((seconds % (60 * 60)) / 60);
+            const remainingSeconds = Math.floor(seconds % 60);
+
+            const parts = [];
+            if (days > 0) parts.push(`${days} day${days > 1 ? 's' : ''}`);
+            if (hours > 0) parts.push(`${hours} hour${hours > 1 ? 's' : ''}`);
+            if (minutes > 0) parts.push(`${minutes} minute${minutes > 1 ? 's' : ''}`);
+            if (remainingSeconds > 0) parts.push(`${remainingSeconds} second${remainingSeconds > 1 ? 's' : ''}`);
+
+            return parts.join(', ');
+        }
+
+        function updateCountdown(unlockTimestamp, secondsRemaining) {
+            const countdownElement = document.getElementById('countdown');
+            const unlockTimeElement = document.getElementById('unlockTime');
+            const timeRemainingElement = document.getElementById('timeRemaining');
+
+            if (currentCountdownTimer) {
+                clearTimeout(currentCountdownTimer);
+                currentCountdownTimer = null;
+            }
+
+            countdownElement.classList.add('active');
+            
+            const unlockDate = new Date(unlockTimestamp * 1000);
+            unlockTimeElement.textContent = unlockDate.toLocaleString();
+
+            let remainingTime = secondsRemaining;
+            const updateTimer = () => {
+                timeRemainingElement.textContent = formatTimeRemaining(remainingTime);
+                if (remainingTime > 0) {
+                    remainingTime--;
+                    currentCountdownTimer = setTimeout(updateTimer, 1000);
+                } else {
+                    timeRemainingElement.textContent = 'File can now be decrypted';
+                    currentCountdownTimer = null;
+                }
+            };
+            updateTimer();
+        }
+
+        async function handleEncryptSubmit(event) {
+            event.preventDefault();
+            const messageElement = document.getElementById('encryptMessage');
+            const spinner = document.getElementById('encryptSpinner');
+            const form = event.target;
+            const formData = new FormData(form);
+
+            // Validate file input
+            const fileInput = form.querySelector('input[type="file"]');
+            if (!fileInput.files || fileInput.files.length === 0) {
+                messageElement.textContent = "Please select a file to encrypt";
+                return;
+            }
+
+            spinner.style.display = 'block';
+            messageElement.textContent = "";
+
+            try {
+                console.log('Sending encryption request...');
+                const response = await fetch('/encrypt', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                console.log('Response received:', response.status);
+                
+                if (response.ok) {
+                    const blob = await response.blob();
+                    const downloadUrl = window.URL.createObjectURL(blob);
+                    const link = document.createElement('a');
+                    link.href = downloadUrl;
+
+                    const contentDisposition = response.headers.get('Content-Disposition');
+                    let filename = 'encrypted_file.tenc';
+                    if (contentDisposition && contentDisposition.includes('attachment')) {
+                        const matches = /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/.exec(contentDisposition);
+                        if (matches !== null && matches[1]) {
+                            filename = matches[1].replace(/['"]/g, '');
+                        }
+                    }
+                    link.download = filename;
+
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                    window.URL.revokeObjectURL(downloadUrl);
+                    messageElement.textContent = "File encrypted successfully!";
+                } else {
+                    const errorText = await response.text();
+                    console.error('Encryption failed:', errorText);
+                    messageElement.textContent = `Encryption failed: ${errorText}`;
+                }
+            } catch (error) {
+                console.error('Encryption error:', error);
+                messageElement.textContent = `An error occurred during encryption: ${error.message}`;
+            } finally {
+                spinner.style.display = 'none';
+            }
+        }
+
+        async function handleDecryptSubmit(event) {
+            event.preventDefault();
+            const messageElement = document.getElementById('decryptMessage');
+            const spinner = document.getElementById('decryptSpinner');
+            const countdownElement = document.getElementById('countdown');
+            const form = event.target;
+            const formData = new FormData(form);
+
+            // Validate file input
+            const fileInput = form.querySelector('input[type="file"]');
+            if (!fileInput.files || fileInput.files.length === 0) {
+                messageElement.textContent = "Please select a file to decrypt";
+                return;
+            }
+
+            spinner.style.display = 'block';
+            messageElement.textContent = "";
+            countdownElement.classList.remove('active');
+
+            if (currentCountdownTimer) {
+                clearTimeout(currentCountdownTimer);
+                currentCountdownTimer = null;
+            }
+
+            try {
+                console.log('Sending decryption request...');
+                const response = await fetch('/decrypt', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                console.log('Response received:', response.status);
+
+                if (response.ok) {
+                    const blob = await response.blob();
+                    const downloadUrl = window.URL.createObjectURL(blob);
+                    const link = document.createElement('a');
+                    link.href = downloadUrl;
+
+                    const contentDisposition = response.headers.get('Content-Disposition');
+                    let filename = 'decrypted_file';
+                    if (contentDisposition && contentDisposition.includes('attachment')) {
+                        const matches = /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/.exec(contentDisposition);
+                        if (matches !== null && matches[1]) {
+                            filename = matches[1].replace(/['"]/g, '');
+                        }
+                    }
+                    link.download = filename;
+
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                    window.URL.revokeObjectURL(downloadUrl);
+                    messageElement.textContent = "File decrypted successfully!";
+                } else {
+                    try {
+                        const data = await response.json();
+                        if (data.unlock_timestamp) {
+                            messageElement.textContent = "File is time-locked";
+                            updateCountdown(data.unlock_timestamp, data.seconds_remaining);
+                        } else {
+                            messageElement.textContent = data.error || "An error occurred during decryption.";
+                        }
+                    } catch (error) {
+                        const errorText = await response.text();
+                        console.error('Decryption failed:', errorText);
+                        messageElement.textContent = `Decryption failed: ${errorText}`;
+                    }
+                }
+            } catch (error) {
+                console.error('Decryption error:', error);
+                messageElement.textContent = `An error occurred during decryption: ${error.message}`;
+            } finally {
+                spinner.style.display = 'none';
+            }
+        }
+
+        // Add event listeners
+        document.getElementById('encryptForm').addEventListener('submit', handleEncryptSubmit);
+        document.getElementById('decryptForm').addEventListener('submit', handleDecryptSubmit);
+    </script>
+</body>
+</html>
